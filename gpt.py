@@ -1,147 +1,170 @@
+import datetime
 import time
 import undetected_chromedriver as uc
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+import threading
+import shutil
 
-drivers = [None] * 2
-response_ids = [2] * 2
-stops = [True] * 2
+drivers = [None] * 10
+lock = threading.Lock()
+share_resource = 0
+response_ids = [1] * 5
+stops = [False] * 5
 
 
-# 开启网页
-def open_chrome(user_data):
-    chrome_options = uc.ChromeOptions()
-    chrome_options.add_argument("--user-data-dir=" + f"D:/WebDriver/Chrome/User_Data/{user_data}")
+def del_user_data():
+    try:
+        shutil.rmtree("D:\\WebDriver")
+        print("删除成功")
+    except Exception as e:
+        print("删除失败, %s" % (e))
+
+
+def load_chrome(thread_no):
     global drivers
-    drivers[int(user_data)] = uc.Chrome(options=chrome_options)
+    global lock
+    global share_resource
+    options = uc.ChromeOptions()
+    options.add_argument("--user-data-dir=" + f"C:/Users/Administrator/Desktop/WebDriver/{thread_no}")
+    with  lock:
+        drivers[thread_no] = uc.Chrome(options=options)
+        drivers[thread_no].set_window_size(800, 600)
+        share_resource += 1
 
 
-# 登录openai
-def login_openai(index):
+def login_web(thread_no, url):
     global drivers
-    drivers[int(index)].get("https://chat.openai.com/")
-    drivers[int(index)].implicitly_wait(1)
+    drivers[thread_no].get(url)
+    drivers[thread_no].implicitly_wait(1)
 
 
-# 发送问题请求
-def ask_question(thread_no, trade_info):
-    msg = f" 你将作为一名专业的股票分析员, 搜索互联网最新信息, 根据获取的最新数据回答问题: \
-          对于以下股票{trade_info}满分为100, 必须输出你对他们未来三天的升值态度的评分. \
-          必须经过信息的查询与分析之后, 给出对应股票的分数. 格式为股票, 分数. "
+def log(str):
+    print("[%s] - %s" % (datetime.datetime.now(), str))
 
-    if not trade_info:
-        print("股票不能为空")
-        exit(-1)
+
+# 登录
+def login(thread_no):
+    # 绑定到登录button
     global drivers
-    wait = WebDriverWait(drivers[int(thread_no)], 20, 0.5)
-    # prompt_area = drivers[int(thread_no)].find_element(By.ID, "prompt-textarea")
-    # send_button = drivers[int(thread_no)].find_element(By.XPATH, '//*[@data-testid="send-button"]')
-    prompt_area = wait.until(EC.visibility_of_element_located((By.ID, "prompt-textarea")))
-    send_button = wait.until(EC.visibility_of_element_located((By.XPATH, '//*[@data-testid="send-button"]')))
-    prompt_area.clear()
-    prompt_area.send_keys(msg)
-    send_button.click()
+    wait = WebDriverWait(drivers[thread_no], 5, 1)
+    try:
+        login_button = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@data-testid="login-button"]')))
+        login_button.click()
+    except:
+        log("%d chrome login_button 没有找到." % (thread_no))
+
+    try:
+        user_name = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="username"]')))
+        user_name.send_keys("siloq40cb@aiuop.com")
+    except:
+        log("%d chrome user_name 没有找到." % (thread_no))
+    try:
+        continue_button_1 = wait.until(EC.presence_of_element_located(
+            (By.XPATH, "//button[@class='c320322a4 c480bc568 c20af198f ce9190a97 _button-login-id']")))
+
+        continue_button_1.click()
+    except:
+        log("%d chrome continue_button_1 没有找到." % (thread_no))
+
+    try:
+        password = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="password"]')))
+        password.send_keys("0126sheng")
+    except:
+        log("%d chrome password 没有找到." % (thread_no))
+
+    # continue_button.click()
+    try:
+        continue_button_2 = wait.until(EC.presence_of_element_located(
+            (By.XPATH, "//button[@class='c320322a4 c480bc568 c20af198f ce9190a97 _button-login-password']")))
+        continue_button_2.click()
+    except:
+        log("%d chrome continue_button_2 没有找到." % (thread_no))
+
+
+def send_request(thread_no, request):
+    # 绑定输入框
+    global drivers
     global response_ids
-    response_ids[int(thread_no)] += 1
-    global stops
-    stops[int(thread_no)] = False
+    wait = WebDriverWait(drivers[thread_no], 20, 0.5)
+    try:
+        prompt_area = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@id='prompt-textarea']")))
+        prompt_area.send_keys("介绍一下C语言。")
+    except:
+        log("%d chrome prompt_area 没有找到." % (thread_no))
+    # 绑定send按键
 
-
-# 接收回复
-def resp_answer(thread_no):
-    global stops
-    wait = WebDriverWait(drivers[int(thread_no)], 120, 0.5)
-    if not stops[int(thread_no)]:
-        print("问题发送成功，正在等待解答...")
-    else:
-        print("问题发送失败.")
-    time.sleep(3)
-    while not stops[int(thread_no)]:
+    send_button = None
+    while not send_button:
         try:
-            # wait.until(EC.invisibility_of_element_located((By.XPATH, "//button[@aria-label='Stop generating']")))
-            # drivers[int(thread_no)].find_element(By.XPATH, "//button[@aria-label='Stop generating']")
-            drivers[int(thread_no)].find_element(By.XPATH, '//*[@data-testid="send-button"]')
-            stops[int(thread_no)] = True
-            print("解答成功，开始捕获")
-        except Exception as ex:
-            stops[int(thread_no)] = False
-            print("仍在解答...")
+            send_button = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@data-testid='send-button']")))
+            send_button.click()
+            response_ids[thread_no] += 1
+            # 问题发送出去了，那就是等待stop变成run。
+            # stop置为false就可以了。
+            # 在接收问题处，不停的检查stop是否还存在，存在则false，不存在则true。
+            stops[thread_no] = False
+            break
 
-    global response_ids
-    if response_ids[int(thread_no)] < 3:
-        pass
-    elif response_ids[int(thread_no)] >= 3:
-        if (response_ids[int(thread_no)] % 2 == 0):
-            response_ids[int(thread_no)] += 1
-
-    time.sleep(2)
-    response = drivers[int(thread_no)].find_element(By.XPATH,
-                                                    f"//*[@data-testid='conversation-turn-{response_ids[int(thread_no)]}']")
-    print(response.text)
-    return response.text
+        except:
+            log("%d chrome send_button 没有找到." % (thread_no))
+            send_button = None
+            # 那么问题就无法发送出去。
+            # 问题无法发送出去，那就不会有回复，就算去调用receive，也会报异常。
+            # 问题没有发出去，就重新发送。
 
 
-def get_answer():
-    global stop
-    wait = WebDriverWait(drivers, 120, 0.5)
-    # stop_ele = wait.until(EC.presence_of_element_located((By.XPATH, "//button[@aria-label='Stop generating']")))
-
-    if not stop:
-        print("正在回答...")
-    else:
-        print("问题没有发送成功...")
-
-    time.sleep(2)
-    while not stop:
+def receive_response(thread_no):
+    # 当stop消失时，绑定所有对话元素
+    global drivers
+    global stops
+    wait = WebDriverWait(drivers[thread_no], 20, 0.5)
+    while not stops[thread_no]:
+        # 等待stop消失
         try:
-            stop = wait.until(EC.invisibility_of_element_located((By.XPATH, "//button[@aria-label='Stop generating']")))
-            # wait.until(EC.visibility_of_element_located((By.XPATH, '//*[@data-testid="send-button"]')))
-            # driver.find_element(By.XPATH, '//*[@data-testid="send-button"]')
-            # driver.find_element(By.XPATH, "//button[@aria-label='Stop generati ng']")
-            stop = True
-            print("回答完毕，开启捕获")
-            # time.sleep(1)
-        except Exception as ex:
-            stop = True
+            stop_button = wait.until(
+                EC.invisibility_of_element_located((By.XPATH, "//button[@aria-label='Stop generating']")))
+            # 消失之后，再查看发送是否存在。如果发送存在且stop消失，则stops[]置为True
+            if stop_button:
+                try:
+                    send_button = wait.until(
+                        EC.presence_of_element_located((By.XPATH, "//*[@data-testid='send-button']")))
+                    log("%d chrome prompt_area stop_button 消失后，send_button is found." % (thread_no))
+                    stops[thread_no] = True
+                except:
+                    log("%d chrome prompt_area stop_button 消失后，send_button not found." % (thread_no))
+        except:
+            log("%d chrome prompt_area stop_button not found." % (thread_no))
+    # 此时，才可以开始捕获回复
 
-    # time.sleep(3)
-    global response_id
-    if response_id < 3:
-        pass
-    elif response_id >= 3:
-        if (response_id % 2 == 0):
-            response_id += 1
-        trace = f"//*[@data-testid='conversation-turn-{response_id}']"
-        response = drivers.find_element(By.XPATH, trace)
-    return response.text
+    pass
 
 
-trade = ['神州高铁' '美丽生态', '深物业A', '南 玻Ａ', '沙河股份', '深康佳Ａ']
-index = 0
-
-
-def thread(thread_no):
-    global index
-    open_chrome(thread_no)
-    login_openai(thread_no)
+# 初始化
+def init(thread_no):
+    # for i in range(thread_num):
+    # del_user_data()
+    load_chrome(thread_no)
+    login_web(thread_no, "https://chat.openai.com/")
+    login(thread_no)
     while True:
-        ask_question(thread_no, trade[index])
-        resp_answer(thread_no)
-        index += 1
+        receive_response(thread_no)
+        send_request(thread_no, None)
 
 
-if __name__ == "__main__":
-    thread(1)
-    # open_chrome('0')
-    # open_chrome('1')
-    # login_openai('0')
-    # login_openai('1')
-    # # while True:
-    # time.sleep(5)
-    # ask_question('0', "国华网安")  # chatgpt3
-    # ask_question('1', "ST深天")  # chatgpt4
-    # while True:
-    #     pass
-    #     # print(colors.GREEN + get_answer() + colors.RESET + "\n")
+if __name__ == '__main__':
+    threads = [None] * 5
+    for i in range(2):
+        threads[i] = threading.Thread(target=init, args=(i,))
+
+    for i in range(2):
+        threads[i].start()
+    # time.sleep(60)
+    # for i in range(5):
+    #     threads[i].join()
+    #     drivers[i].close()
+    print("share_resource = %d" % (share_resource,))
+    while True:
+        pass
