@@ -8,6 +8,9 @@ from selenium.webdriver.common.keys import Keys
 import threading
 import shutil
 
+# 一次问题股票数量
+N = 4
+
 drivers = [None] * 10
 lock = threading.Lock()
 share_resource = 0
@@ -94,17 +97,18 @@ def send_request(thread_no, request):
     # 绑定输入框
     global drivers
     global response_ids
+    global N
     wait = WebDriverWait(drivers[thread_no], 20, 0.5)
     try:
-
-        #    "你将作为一名专业的股票分析员, 搜索互联网最新信息, 根据获取的最新数据回答问题: \
-        #         对于以下股票{request}满分为100, 必须输出你对他们未来三天的升值态度的评分. \
-        #        必须经过信息的联网查询与分析之后, 给出对应股票的分数. 格式为股票, 分数，并使用中文进行回答 "
+        msg = f"你将作为一名专业的股票分析员, 搜索互联网最新信息, 根据获取的最新数据回答问题: \
+                对于以下{N}个股票[ {request} ], 假如满分为100, 必须输出你对他们未来三天的升值态度的评分. \
+               必须经过信息的联网查询与分析之后, 给出对应股票的分数. 格式为股票, 分数，并使用中文进行回答, 给出总结性概述。 "
         prompt_area = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@id='prompt-textarea']")))
-        msg = f"\
-        作为一名专业股票分析员，我需要ChatGPT给出对以下股票未来三天升值的预测评分，以百分制表示。\
-        请基于互联网最新信息进行查询和分析，并以[股票1 = 分数1, 股票2 = 分数2, ...] 的格式进行回答。\
-        股票名字分别是[{request}]。确保使用中文回答."
+        # msg = f"\
+        # 作为一名专业股票分析员，我需要ChatGPT给出对以下股票未来三天升值的预测评分，以百分制表示。\
+        # 请基于互联网最新信息进行查询和分析，并以[股票1 = 分数1, 股票2 = 分数2, ...] 的格式进行回答。\
+        # 股票名字分别是[{request}]。确保使用中文回答."
+        prompt_area.clear()
         prompt_area.send_keys(msg)
     except:
         log("%d chrome prompt_area 没有找到." % (thread_no))
@@ -116,9 +120,6 @@ def send_request(thread_no, request):
             send_button = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@data-testid='send-button']")))
             send_button.click()
             response_ids[thread_no] += 1
-            # 问题发送出去了，那就是等待stop变成run。
-            # stop置为false就可以了。
-            # 在接收问题处，不停的检查stop是否还存在，存在则false，不存在则true。
             stops[thread_no] = False
             log("问题发送成功")
             break
@@ -126,9 +127,6 @@ def send_request(thread_no, request):
         except:
             log("%d chrome send_button 没有找到." % (thread_no))
             send_button = None
-            # 那么问题就无法发送出去。
-            # 问题无法发送出去，那就不会有回复，就算去调用receive，也会报异常。
-            # 问题没有发出去，就重新发送。
 
 
 # 接收响应
@@ -136,6 +134,7 @@ def receive_response(thread_no):
     # 当stop消失时，绑定所有对话元素
     global drivers
     global stops
+    drivers[thread_no].maximize_window()
     drivers[thread_no].implicitly_wait(2)
     wait = WebDriverWait(drivers[thread_no], 20, 0.5)
     # 在此处开始设置计时器，当超过5分钟仍然在此函数时，刷新页面，重置 request_ids[thread_no]
@@ -151,11 +150,10 @@ def receive_response(thread_no):
                 response_ids[thread_no] = 1
                 drivers[thread_no].refresh()
                 begin = time.time()
-                return
+                raise Exception("已重置")
 
             stop_button = wait.until(
                 EC.invisibility_of_element_located((By.XPATH, "//button[@aria-label='Stop generating']")))
-            # 消失之后，再查看发送是否存在。如果发送存在且stop消失，则stops[]置为True
             if stop_button:
                 try:
                     send_button = wait.until(
@@ -166,7 +164,6 @@ def receive_response(thread_no):
                     log("%d chrome prompt_area stop_button 消失后，send_button not found." % (thread_no))
         except:
             log("%d chrome prompt_area stop_button is also found." % (thread_no))
-    # 此时，才可以开始捕获回复
 
     try:
         if response_ids[thread_no] % 2 == 0:
@@ -189,18 +186,59 @@ def receive_response(thread_no):
 
 
 company_names = [
-    "藏格矿业",
-    "云鼎科技",
-    "沈阳机床",
-    "英特集团",
-    "东旭光电",
-    "渤海租赁",
-    "*ST民控",
-    "合肥百货",
-    "通程控股",
-    "吉林化纤",
-    "南京公用"
+    "深科技",
+    "ST深天",
+    "特 力Ａ",
+    "飞亚达",
+    "深圳能源",
+    "国药一致",
+    "深深房Ａ",
+    "富奥股份",
+    "大悦城",
+    "深桑达Ａ",
+    "神州数码",
+    "中国天楹",
+    "华联控股",
+    "深南电A",
+    "中集集团",
+    "东旭蓝天",
+    "中洲控股",
+    "深纺织Ａ",
+    "*ST泛海",
+    "京基智农",
+    "德赛电池",
+    "深天马Ａ",
+    "方大集团",
+    "皇庭国际",
+    "深 赛 格",
+    "华锦股份",
+    "中金岭南",
+    "农 产 品",
+    "深圳华强",
+    "中兴通讯",
+    "北方国际",
+    "中国长城",
+    "华控赛格",
+    "华侨城Ａ",
+    "特发信息",
+    "海王生物",
+    "盐 田 港",
+    "深圳机场",
+    "天健集团",
+    "广聚能源",
+    "中信海直",
+    "TCL科技"
 ]
+
+
+def get_msg(arr, index):
+    global N
+    msg = ""
+    for i in range(N):
+        msg += arr[i + index]
+        msg += ','
+
+    return msg
 
 
 # 启动初始化
@@ -208,17 +246,20 @@ def init(thread_no):
     global company_names
     load_chrome(thread_no)
     login_web(thread_no, "https://chat.openai.com/")
-    # login_web(thread_no, "https://www.bilibili.com/")
-    # login(thread_no)
+    login(thread_no)
+    global N
     i = 0
     while True:
         try:
             time.sleep(2)
-            receive_response(thread_no)
+            try:
+                receive_response(thread_no)
+            except:
+                i -= 1
             time.sleep(2)
             if i < len(company_names) - 1:
-                send_request(thread_no, (company_names[i] + "," + company_names[i + 1]))
-                i += 2
+                send_request(thread_no, get_msg(company_names, i))
+                i += N
             elif i == len(company_names) - 1:
                 send_request(thread_no, (company_names[i]))
             else:
