@@ -94,27 +94,23 @@ def login(thread_no):
 
 # 发送请求
 def send_request(thread_no, request):
-    # 绑定输入框
     global drivers
     global response_ids
     global N
     wait = WebDriverWait(drivers[thread_no], 20, 0.5)
     try:
-        msg = f"你将作为一名专业的股票分析员, 搜索互联网最新信息, 根据获取的最新数据回答问题: \
-                对于以下{N}个股票[ {request} ], 假如满分为100, 必须输出你对他们未来三天的升值态度的评分. \
-               必须经过信息的联网查询与分析之后, 给出对应股票的分数. 格式为股票, 分数，并使用中文进行回答, 给出总结性概述。 "
+        msg = f"As a professional stock analyst, you will search the latest information on the Internet and answer questions based on the latest data obtained: \
+                 For the following {N} stocks {request}, if the full score is 100, you must output your score on their appreciation attitude in the next three days. \
+                After online query and analysis of information, the score of the corresponding stock must be given. \
+                The format is stock, score, and the answer is in Chinese, giving a summary summary. "
         prompt_area = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@id='prompt-textarea']")))
-        # msg = f"\
-        # 作为一名专业股票分析员，我需要ChatGPT给出对以下股票未来三天升值的预测评分，以百分制表示。\
-        # 请基于互联网最新信息进行查询和分析，并以[股票1 = 分数1, 股票2 = 分数2, ...] 的格式进行回答。\
-        # 股票名字分别是[{request}]。确保使用中文回答."
         prompt_area.clear()
         prompt_area.send_keys(msg)
     except:
         log("%d chrome prompt_area 没有找到." % (thread_no))
-    # 绑定send按键
 
     send_button = None
+    begin = time.time()
     while not send_button:
         try:
             send_button = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@data-testid='send-button']")))
@@ -127,26 +123,27 @@ def send_request(thread_no, request):
         except:
             log("%d chrome send_button 没有找到." % (thread_no))
             send_button = None
+            cur = time.time()
+            if cur - begin > 10 * 60:
+                break
+            # 接收响应
 
 
-# 接收响应
+# 接收回复
 def receive_response(thread_no):
-    # 当stop消失时，绑定所有对话元素
     global drivers
     global stops
     drivers[thread_no].maximize_window()
     drivers[thread_no].implicitly_wait(2)
     wait = WebDriverWait(drivers[thread_no], 20, 0.5)
-    # 在此处开始设置计时器，当超过5分钟仍然在此函数时，刷新页面，重置 request_ids[thread_no]
     begin = time.time()
     while not stops[thread_no]:
-        # 等待stop消失
         try:
             cur = time.time()
             elapsed_time = (cur - begin)
             log("elapsed_time = %d" % (elapsed_time))
-            if elapsed_time > 5 * 60:
-                log("已超时五分钟, 重置Chrome.")
+            if elapsed_time > 10 * 60:
+                log("已超时10分钟, 重置Chrome.")
                 response_ids[thread_no] = 1
                 drivers[thread_no].refresh()
                 begin = time.time()
@@ -163,7 +160,11 @@ def receive_response(thread_no):
                 except:
                     log("%d chrome prompt_area stop_button 消失后，send_button not found." % (thread_no))
         except:
-            log("%d chrome prompt_area stop_button is also found." % (thread_no))
+            log("%d chrome stop_button is also found." % (thread_no))
+            ex_cur = time.time()
+            if ex_cur - begin > 10 * 60:
+                log("超时10分钟，stop is also found.")
+                return
 
     try:
         if response_ids[thread_no] % 2 == 0:
@@ -174,8 +175,10 @@ def receive_response(thread_no):
                 (By.XPATH, f"//*[@data-testid='conversation-turn-{response_ids[thread_no]}']"))
         )
         log("%d 捕获回答" % (thread_no))
-        file = open(f"%s_%d_resp" % (datetime.date.today(), thread_no), "a+")
-        file.write("%d:" % (response_ids[thread_no]))
+        file = open(f"resp/%s_%d_resp.txt" % (datetime.date.today(), thread_no), "a+")
+        if not file:
+            print("file 打开失败.")
+        file.write("\n%d:%s\n" % (response_ids[thread_no], datetime.datetime.now()))
         file.write(element_with_conversation.text)
         file.write("\n")
         file.close()
@@ -186,67 +189,50 @@ def receive_response(thread_no):
 
 
 company_names = [
+    "深振业Ａ",
+    "美丽生态",
+    "南玻A",
+    "深中华A",
+    "深粮控股",
     "深科技",
-    "ST深天",
-    "特 力Ａ",
+    "特力A",
     "飞亚达",
-    "深圳能源",
     "国药一致",
     "深深房Ａ",
     "富奥股份",
-    "大悦城",
-    "深桑达Ａ",
+    "深桑达A",
     "神州数码",
     "中国天楹",
     "华联控股",
-    "深南电A",
-    "中集集团",
     "东旭蓝天",
     "中洲控股",
-    "深纺织Ａ",
-    "*ST泛海",
+    "深纺织A",
+    "ST泛海",
     "京基智农",
     "德赛电池",
-    "深天马Ａ",
     "方大集团",
     "皇庭国际",
-    "深 赛 格",
     "华锦股份",
     "中金岭南",
-    "农 产 品",
+    "农产品",
     "深圳华强",
     "中兴通讯",
     "北方国际",
     "中国长城",
     "华控赛格",
-    "华侨城Ａ",
     "特发信息",
     "海王生物",
-    "盐 田 港",
-    "深圳机场",
-    "天健集团",
-    "广聚能源",
-    "中信海直",
-    "TCL科技"
+    "盐田港"
 ]
-
-
-def get_msg(arr, index):
-    global N
-    msg = ""
-    for i in range(N):
-        msg += arr[i + index]
-        msg += ','
-
-    return msg
 
 
 # 启动初始化
 def init(thread_no):
     global company_names
     load_chrome(thread_no)
-    login_web(thread_no, "https://chat.openai.com/")
-    login(thread_no)
+    login_web(thread_no, "https://chat.openai.com/g/g-hif9KsjJ2-a-professional-stock-analyst")
+    # login_web(thread_no, "https://www.bilibili.com")
+    # login(thread_no)
     global N
     i = 0
     while True:
@@ -255,18 +241,30 @@ def init(thread_no):
             try:
                 receive_response(thread_no)
             except:
-                i -= 1
+                i -= N
             time.sleep(2)
-            if i < len(company_names) - 1:
-                send_request(thread_no, get_msg(company_names, i))
+            if i + N <= len(company_names) - 1:
+                req = []
+                stack = company_names[i: i + N]
+                req.append(", ".join(stack))
+                send_request(thread_no, req)
                 i += N
-            elif i == len(company_names) - 1:
-                send_request(thread_no, (company_names[i]))
-            else:
+            elif i < len(company_names) - 1 and i + N > len(company_names) - 1:
+                # 若i+N大于下标值，则全部输出
+                req = []
+                stack = company_names[i:]
+                req.append(", ".join(stack))
+                send_request(thread_no, req)
+                i += N
+            elif i > len(company_names) - 1:
                 log("执行结束。共统计 %d 个股票。" % (i + 1))
+                for driver in drivers:
+                    driver.close()
                 exit(0)
         except Exception as e:
             log("执行结束。共统计 %d 个股票。" % (i + 1))
+            for driver in drivers:
+                driver.close()
             exit(0)
 
 
